@@ -1,0 +1,193 @@
+-- AIR SLIDE V3
+-- Mobile + PC
+-- Chained slides with camera dip
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+
+local CONFIG = {
+    BurstSpeed = 78,
+    EndSpeed = 43,
+    Duration = 0.42,
+    Cooldown = 0.06,
+    CameraDip = -1.1,
+    CameraTime = 0.12
+}
+
+local sliding = false
+local lastSlide = 0
+local slideToken = 0
+local cameraTween
+
+local function getCharacter()
+    local character = player.Character
+    if not character then return end
+
+    local humanoid =
+        character:FindFirstChildOfClass("Humanoid")
+
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+
+    if not humanoid or not root then return end
+    if humanoid.Health <= 0 then return end
+
+    return humanoid, root
+end
+
+local function tweenCamera(humanoid, offset, duration)
+    if cameraTween then
+        cameraTween:Cancel()
+    end
+
+    cameraTween = TweenService:Create(
+        humanoid,
+        TweenInfo.new(
+            duration,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        ),
+        {
+            CameraOffset = offset
+        }
+    )
+
+    cameraTween:Play()
+end
+
+local function airSlide()
+    local now = os.clock()
+
+    if sliding then return end
+    if now - lastSlide < CONFIG.Cooldown then return end
+
+    local humanoid, root = getCharacter()
+    if not humanoid then return end
+
+    sliding = true
+    lastSlide = now
+    slideToken += 1
+
+    local token = slideToken
+    local originalOffset = humanoid.CameraOffset
+
+    local direction = humanoid.MoveDirection
+
+    if direction.Magnitude < 0.1 then
+        direction = root.CFrame.LookVector
+    end
+
+    direction = Vector3.new(
+        direction.X,
+        0,
+        direction.Z
+    )
+
+    if direction.Magnitude < 0.01 then
+        sliding = false
+        return
+    end
+
+    direction = direction.Unit
+
+    -- Camera dipping effect
+    tweenCamera(
+        humanoid,
+        originalOffset + Vector3.new(
+            0,
+            CONFIG.CameraDip,
+            0
+        ),
+        CONFIG.CameraTime
+    )
+
+    local startTime = os.clock()
+
+    while os.clock() - startTime < CONFIG.Duration do
+        if token ~= slideToken then break end
+        if not root.Parent then break end
+        if humanoid.Health <= 0 then break end
+
+        local progress = math.clamp(
+            (os.clock() - startTime) / CONFIG.Duration,
+            0,
+            1
+        )
+
+        -- Fast burst followed by smooth momentum decay
+        local eased = 1 - (1 - progress)^2
+
+        local speed =
+            CONFIG.BurstSpeed +
+            (CONFIG.EndSpeed - CONFIG.BurstSpeed) * eased
+
+        local currentVelocity = root.AssemblyLinearVelocity
+
+        root.AssemblyLinearVelocity = Vector3.new(
+            direction.X * speed,
+            currentVelocity.Y,
+            direction.Z * speed
+        )
+
+        RunService.Heartbeat:Wait()
+    end
+
+    tweenCamera(
+        humanoid,
+        originalOffset,
+        CONFIG.CameraTime
+    )
+
+    sliding = false
+end
+
+-- PC CONTROL
+
+UIS.InputBegan:Connect(function(input, processed)
+    if processed then return end
+
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        task.spawn(airSlide)
+    end
+end)
+
+-- MOBILE GUI
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "AirSlideV3"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Name = "SlideButton"
+button.Size = UDim2.fromOffset(115, 50)
+button.Position = UDim2.new(1, -135, 1, -180)
+
+button.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+button.Text = "AIR SLIDE"
+button.TextScaled = true
+button.Font = Enum.Font.GothamBold
+
+button.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = button
+
+button.Activated:Connect(function()
+    task.spawn(airSlide)
+end)
+
+-- Reset after respawn
+
+player.CharacterAdded:Connect(function()
+    slideToken += 1
+    sliding = false
+    lastSlide = 0
+end)
