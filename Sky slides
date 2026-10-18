@@ -1,0 +1,113 @@
+-- AIR SLIDE V2
+-- Momentum-based movement prototype
+-- Mobile + PC
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- Movement settings
+local START_SPEED = 85
+local END_SPEED = 48
+local SLIDE_DURATION = 0.48
+local COOLDOWN = 0.08
+
+local sliding = false
+local lastSlide = 0
+
+local function slide()
+    if sliding then return end
+    if os.clock() - lastSlide < COOLDOWN then return end
+
+    local character = player.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+
+    if not humanoid or not root or humanoid.Health <= 0 then
+        return
+    end
+
+    sliding = true
+    lastSlide = os.clock()
+
+    local direction = humanoid.MoveDirection
+
+    if direction.Magnitude < 0.1 then
+        direction = root.CFrame.LookVector
+    end
+
+    direction = Vector3.new(direction.X, 0, direction.Z)
+
+    if direction.Magnitude < 0.01 then
+        sliding = false
+        return
+    end
+
+    direction = direction.Unit
+
+    local startTime = os.clock()
+
+    while os.clock() - startTime < SLIDE_DURATION do
+        if not root.Parent or humanoid.Health <= 0 then
+            break
+        end
+
+        local progress = math.clamp(
+            (os.clock() - startTime) / SLIDE_DURATION,
+            0,
+            1
+        )
+
+        -- Smooth momentum decay
+        local speed = START_SPEED +
+            (END_SPEED - START_SPEED) * progress
+
+        local current = root.AssemblyLinearVelocity
+
+        root.AssemblyLinearVelocity = Vector3.new(
+            direction.X * speed,
+            current.Y,
+            direction.Z * speed
+        )
+
+        RunService.Heartbeat:Wait()
+    end
+
+    sliding = false
+end
+
+-- PC
+UIS.InputBegan:Connect(function(input, processed)
+    if processed then return end
+
+    if input.KeyCode == Enum.KeyCode.LeftControl then
+        task.spawn(slide)
+    end
+end)
+
+-- MOBILE GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AirSlideV2"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.fromOffset(115, 50)
+button.Position = UDim2.new(1, -135, 1, -180)
+button.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Text = "AIR SLIDE"
+button.TextScaled = true
+button.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = button
+
+button.Activated:Connect(function()
+    task.spawn(slide)
+end)
